@@ -1,0 +1,10 @@
+.DS_Store
+app.json
+*/**/.DS_Store
+node_modules
+npm-debug.log
+config.js
+*~
+*.swp
+*.pem
+.node-xmlhttprequest-*

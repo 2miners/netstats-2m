@@ -1,0 +1,24 @@
+[
+  {
+    "name"              : "Ethereum",
+    "script"            : "app.js",
+    "log_date_format"   : "YYYY-MM-DD HH:mm Z",
+    "merge_logs"        : false,
+    "watch"             : false,
+    "max_restarts"      : 10,
+    "exec_interpreter"  : "node",
+    "exec_mode"         : "fork_mode",
+    "env":
+    {
+      "NODE_ENV"        : "Ethereum",
+      "RPC_HOST"        : "localhost",
+      "RPC_PORT"        : "8545",
+      "LISTENING_PORT"  : "30303",
+      "INSTANCE_NAME"   : "2Miners.com Ethereum",
+      "CONTACT_DETAILS" : "eth.2miners.com",
+      "WS_SERVER"       : "wss://eth-stats.2miners.com",
+      "WS_SECRET"       : "4ce279da264302069d919845eead5350",
+      "VERBOSITY"       : 0
+    }
+  }
+]
