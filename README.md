@@ -22,9 +22,9 @@ Configure the app modifying [processes.json](/processes.json). Note that you hav
 		"RPC_HOST"        : "localhost", // geth or parity JSON-RPC host
 		"RPC_PORT"        : "8545", // geth or parity JSON-RPC port
 		"LISTENING_PORT"  : "30303", // eth listening port (only used for display)
-		"INSTANCE_NAME"   : "2Miners.com Ethereum", // whatever you wish to name your node
-		"CONTACT_DETAILS" : "eth.2miners.com", // add your contact details here if you wish (email/skype)
-		"WS_SERVER"       : "wss://eth-stats.2miners.com", // path to netstats WebSockets api server
+		"INSTANCE_NAME"   : "2Miners.com Moac", // whatever you wish to name your node
+		"CONTACT_DETAILS" : "moac.2miners.com", // add your contact details here if you wish (email/skype)
+		"WS_SERVER"       : "wss://moac-stats.2miners.com", // path to netstats WebSockets api server
 		"WS_SECRET"       : "4ce279da264302069d919845eead5350", // WebSockets api server secret used for login
 		"VERBOSITY"       : 0 // Set the verbosity (0 = silent, 1 = error, warn, 2 = error, warn, info, success, 3 = all logs)
 	}
@@ -37,6 +37,7 @@ Get it using git:
 ```bash
 cd ~
 git clone https://github.com/2miners/netstats-2m
+git checkout moac
 cd ~/netstat-2m
 npm install
 ```
