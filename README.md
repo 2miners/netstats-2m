@@ -37,14 +37,14 @@ Get it using git:
 ```bash
 cd ~
 git clone https://github.com/2miners/netstats-2m
-cd ~/netstat-2m
+cd ~/netstats-2m
 npm install
 ```
 
 Run it using pm2:
 
 ```bash
-cd ~/netstat-2m
+cd ~/netstats-2m
 pm2 start processes.json
 pm2 startup
 ```
