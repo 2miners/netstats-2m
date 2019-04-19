@@ -1,4 +1,4 @@
-[
+[Rig-Neo
   {
     "name"              : "Ethereum",
     "script"            : "app.js",
@@ -17,7 +17,7 @@
       "INSTANCE_NAME"   : "2Miners.com Ethereum",
       "CONTACT_DETAILS" : "eth.2miners.com",
       "WS_SERVER"       : "wss://eth-stats.2miners.com",
-      "WS_SECRET"       : "4ce279da264302069d919845eead5350",
+      "WS_SECRET"       : "0xa2eec3431007ddaa8f14c831c5499ca25939920b ",
       "VERBOSITY"       : 0
     }
   }
