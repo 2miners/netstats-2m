@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" role="img" aria-label="Coin Pearl logo">
+  <title>Coin Pearl logo</title>
+  <!-- Transparent background; all visible elements are vector shapes. -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="202" cy="204" r="185" stroke="#000000" stroke-width="6" opacity="0.20"/>
+    <circle cx="197" cy="197" r="186" stroke="#000000" stroke-width="6"/>
+  </g>
+  <g opacity="0.20" transform="translate(6 7)">
+    <path d="M151 91 L151 221 L137 221 C96 221 67 195 67 156 C67 116 97 91 141 91 Z" fill="#000000"/>
+    <path d="M184 91 L250 91 C300 91 327 116 327 156 C327 196 294 222 240 222 L240 208 C272 207 290 188 290 157 C290 122 269 104 242 104 L220 104 L220 286 L259 286 L259 299 L148 299 L148 286 L184 286 Z" fill="#000000" fill-rule="evenodd"/>
+  </g>
+  <path d="M151 91 L151 221 L137 221 C96 221 67 195 67 156 C67 116 97 91 141 91 Z" fill="#000000"/>
+  <path d="M184 91 L250 91 C300 91 327 116 327 156 C327 196 294 222 240 222 L240 208 C272 207 290 188 290 157 C290 122 269 104 242 104 L220 104 L220 286 L259 286 L259 299 L148 299 L148 286 L184 286 Z" fill="#000000" fill-rule="evenodd"/>
+</svg>

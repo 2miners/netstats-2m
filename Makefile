@@ -21,7 +21,7 @@ release:
 		name=netstats-2m-$(VERSION)-linux-$$arch; \
 		mkdir -p $(RELEASE)/stage/$$name && \
 		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o $(RELEASE)/stage/$$name/netstats-2m . && \
-		cp README.md LICENSE example.env example-rvn.env deploy/netstats-2m@.service $(RELEASE)/stage/$$name/ && \
+		cp -R README.md LICENSE examples deploy/netstats-2m@.service $(RELEASE)/stage/$$name/ && \
 		tar -C $(RELEASE)/stage -czf $(RELEASE)/$$name.tar.gz $$name || exit 1; \
 	done
 	rm -rf $(RELEASE)/stage

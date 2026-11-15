@@ -1,5 +1,4 @@
 build/
 /netstats-2m
 *.env
-!example.env
-!example-rvn.env
+!examples/*.env
