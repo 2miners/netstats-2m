@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/2miners/netstats-2m/internal/rpc"
@@ -632,7 +633,14 @@ func (a *substrateAPI) sync(ctx context.Context) (float64, float64, bool, error)
 // quaiAPI follows the zone chain (the KawPoW blocks); every block carries
 // "algos": difficulty, hashrate and share time of KawPoW, SHA256 and Scrypt
 // from quai_getMiningInfo, shown as one card per algorithm on the page.
-type quaiAPI struct{ c *rpc.JSONClient }
+type quaiAPI struct {
+	c *rpc.JSONClient
+
+	mu     sync.Mutex
+	tipH   float64
+	algos  []any
+	algoAt time.Time
+}
 
 func (a *quaiAPI) call(ctx context.Context, method string, params any, out any) error {
 	return a.c.Call2(ctx, "/", method, params, out)
@@ -664,7 +672,39 @@ func (a *quaiAPI) tip(ctx context.Context) (float64, string, error) {
 	if err != nil {
 		return 0, "", err
 	}
-	return num(obj(b, "woHeader", "number")), str(b["hash"]), nil
+	h := num(obj(b, "woHeader", "number"))
+	a.mu.Lock()
+	a.tipH = h
+	a.mu.Unlock()
+	return h, str(b["hash"]), nil
+}
+
+// miningAlgos is quai_getMiningInfo (it analyses the last ~176 blocks), cached
+// for 10 s and asked only for the tip: history blocks don't need it.
+func (a *quaiAPI) miningAlgos(ctx context.Context) []any {
+	a.mu.Lock()
+	if a.algos != nil && time.Since(a.algoAt) < 10*time.Second {
+		v := a.algos
+		a.mu.Unlock()
+		return v
+	}
+	a.mu.Unlock()
+	var mi map[string]any
+	if a.call(ctx, "quai_getMiningInfo", nil, &mi) != nil {
+		return nil
+	}
+	algo := func(name, diff, hr, share string) map[string]any {
+		return map[string]any{"name": name, "difficulty": num(mi[diff]), "hashrate": num(mi[hr]), "shareTime": num(mi[share])}
+	}
+	v := []any{
+		algo("KawPoW", "kawpowDifficulty", "kawpowHashRate", "avgKawpowShareTime"),
+		algo("SHA256", "shaDifficulty", "shaHashRate", "avgShaShareTime"),
+		algo("Scrypt", "scryptDifficulty", "scryptHashRate", "avgScryptShareTime"),
+	}
+	a.mu.Lock()
+	a.algos, a.algoAt = v, time.Now()
+	a.mu.Unlock()
+	return v
 }
 
 func (a *quaiAPI) block(ctx context.Context, height float64) (map[string]any, error) {
@@ -677,15 +717,12 @@ func (a *quaiAPI) block(ctx context.Context, height float64) (map[string]any, er
 	out := newBlock(num(obj(wo, "number")), str(b["hash"]), str(obj(wo, "parentHash")), num(obj(wo, "timestamp")),
 		str(obj(wo, "primaryCoinbase")), num(obj(wo, "difficulty")), 0, float64(len(txs)),
 		num(obj(b, "header", "size")), num(obj(b, "header", "totalFees"))/1e18)
-	var mi map[string]any
-	if a.call(ctx, "quai_getMiningInfo", nil, &mi) == nil {
-		algo := func(name, diff, hr, share string) map[string]any {
-			return map[string]any{"name": name, "difficulty": num(mi[diff]), "hashrate": num(mi[hr]), "shareTime": num(mi[share])}
-		}
-		out["algos"] = []any{
-			algo("KawPoW", "kawpowDifficulty", "kawpowHashRate", "avgKawpowShareTime"),
-			algo("SHA256", "shaDifficulty", "shaHashRate", "avgShaShareTime"),
-			algo("Scrypt", "scryptDifficulty", "scryptHashRate", "avgScryptShareTime"),
+	a.mu.Lock()
+	isTip := height >= a.tipH
+	a.mu.Unlock()
+	if isTip {
+		if v := a.miningAlgos(ctx); v != nil {
+			out["algos"] = v
 		}
 	}
 	return out, nil

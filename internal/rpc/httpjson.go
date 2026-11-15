@@ -26,6 +26,7 @@ type JSONClient struct {
 	mu     sync.Mutex
 	digest map[string]string // last digest challenge
 	nc     int
+	reqMu  sync.Mutex // with a login, requests go one at a time (digest nonce counts)
 }
 
 func NewJSON(base, user, pass string) *JSONClient {
@@ -94,7 +95,11 @@ func errorsAs(err error, he **HTTPError) bool {
 func (c *JSONClient) do(ctx context.Context, method, path string, body []byte, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 	defer cancel()
-	for attempt := 0; attempt < 2; attempt++ {
+	if c.User != "" || c.Pass != "" {
+		c.reqMu.Lock()
+		defer c.reqMu.Unlock()
+	}
+	for attempt := 0; attempt < 3; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, method, c.Base+path, bytes.NewReader(body))
 		if err != nil {
 			return err
@@ -112,7 +117,7 @@ func (c *JSONClient) do(ctx context.Context, method, path string, body []byte, o
 		if err != nil {
 			return err
 		}
-		if resp.StatusCode == http.StatusUnauthorized && attempt == 0 && c.setDigest(resp.Header.Get("WWW-Authenticate")) {
+		if resp.StatusCode == http.StatusUnauthorized && attempt < 2 && c.setDigest(resp.Header.Get("WWW-Authenticate")) {
 			continue // retry with the digest answer
 		}
 		if resp.StatusCode/100 != 2 {
