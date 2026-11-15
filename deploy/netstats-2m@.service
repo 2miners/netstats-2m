@@ -1,0 +1,21 @@
+# One reporter per node: netstats-2m@<name> reads /opt/netstats-2m/<name>.env
+#   useradd --system --home-dir /opt/netstats-2m --shell /usr/sbin/nologin netstats-2m
+[Unit]
+Description=netstats client (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=netstats-2m
+Group=netstats-2m
+WorkingDirectory=/opt/netstats-2m
+ExecStart=/opt/netstats-2m/netstats-2m -env /opt/netstats-2m/%i.env
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
