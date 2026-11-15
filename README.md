@@ -8,7 +8,7 @@ A single static Go binary: no Node.js, npm or PM2.
 ## Requirements
 
 * A node with the WebSocket RPC enabled (`--ws`, APIs `eth,net,web3`)
-* Go 1.26+ to build (or a prebuilt linux/amd64 binary)
+* Go 1.26+ to build, or a prebuilt linux amd64/arm64 binary
 
 ## Download
 
