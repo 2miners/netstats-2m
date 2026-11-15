@@ -1,50 +1,42 @@
-2Miners Network Stats Dashboard
-============
+2Miners netstats client
+=======================
 
-This is the backend service which runs along with your EthereumPoW (ETHW) node, fetches information from it through HTTP JSON-RPC and feeds it over WebSockets to the [2Miners ETHW network stats](https://2miners.com/ethw-stats/) dashboard.
+Node-side reporter for the 2Miners network stats pages ([ETC](https://2miners.com/etc-stats/), [ETHW](https://2miners.com/ethw-stats/)). It runs next to an Ethereum-family node (geth, core-geth, ...), reads it over **WebSocket JSON-RPC** (`newBlockHeaders` / `pendingTransactions` subscriptions plus periodic stats) and pushes the data over WebSockets (Primus) to an [eth-netstats](https://github.com/cubedro/eth-netstats)-compatible server.
 
-# How to add your node
+## Requirements
 
-## Prerequisite
-* an ETHW node (ETHW Core / geth-compatible client) with HTTP JSON-RPC enabled
-* node.js 22.12+ and npm
-* [pm2](https://pm2.keymetrics.io/) (`npm install -g pm2`)
+* Node.js 22.12 or newer (developed on 26)
+* A node with the WebSocket RPC enabled (`--ws`, APIs `eth,net,web3`)
 
-## Configuration
-
-Configure the app by editing the `env` section of [processes.json](/processes.json):
+## Install
 
 ```bash
-"env":
-	{
-		"NODE_ENV"        : "production", // tell the client we're in production environment
-		"RPC_HOST"        : "localhost", // node HTTP JSON-RPC host
-		"RPC_PORT"        : "8545", // node HTTP JSON-RPC port
-		"LISTENING_PORT"  : "30303", // p2p listening port (only used for display)
-		"INSTANCE_NAME"   : "2Miners.com ETHW", // whatever you wish to name your node
-		"CONTACT_DETAILS" : "ethw.2miners.com", // add your contact details here if you wish (email/telegram)
-		"WS_SERVER"       : "wss://ethw-stats.2miners.com", // path to netstats WebSockets api server
-		"WS_SECRET"       : "4ce279da264302069d919845eead5350", // WebSockets api server secret used for login
-		"VERBOSITY"       : 0 // Set the verbosity (0 = silent, 1 = error, warn, 2 = error, warn, info, success, 3 = all logs)
-	}
-```
-
-## Get and run
-
-Get it using git:
-
-```bash
-cd ~
 git clone https://github.com/2miners/netstats-2m
-cd ~/netstats-2m
-npm install
+cd netstats-2m
+npm ci
 ```
 
-Run it using pm2:
+## Configure
+
+Copy [processes.json](processes.json) (for example to `ethw.json`) and set the env vars:
+
+| Var | Meaning |
+|---|---|
+| `RPC_HOST`, `RPC_PORT` | node WebSocket RPC (default `localhost:8545`) |
+| `WS_SERVER` | netstats server, e.g. `wss://ethw-stats.2miners.com` or `wss://etc-stats.2miners.com` |
+| `WS_SECRET` | server secret (ask 2Miners) |
+| `INSTANCE_NAME` | name shown on the page; required with `NODE_ENV=production` |
+| `CONTACT_DETAILS` | optional contact shown on the page |
+| `LISTENING_PORT` | p2p port, display only |
+| `VERBOSITY` | 0 silent, 1 errors/warnings, 2 + info, 3 everything |
+
+## Run
 
 ```bash
-cd ~/netstats-2m
-pm2 start processes.json
+pm2 start ethw.json
 pm2 save
-pm2 startup
 ```
+
+## Behaviour when the node is down
+
+The client keeps one RPC connection and retries every 5 s while the node is unreachable; memory stays flat. Older versions (web3 1.3–1.7 based) multiplied their reconnect attempts every 5 s and ran out of memory within minutes.

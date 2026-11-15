@@ -1,10 +1,6 @@
-.DS_Store
-app.json
-*/**/.DS_Store
 node_modules
 npm-debug.log
-config.js
+*.log
+.DS_Store
 *~
 *.swp
-*.pem
-.node-xmlhttprequest-*
