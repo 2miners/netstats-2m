@@ -2,10 +2,11 @@ package reporter
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"log/slog"
 	"math"
 	"math/big"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -48,6 +49,9 @@ type btcNode struct {
 	mu        sync.Mutex
 	syncStart float64 // first height seen while syncing
 	syncing   bool
+
+	// what this node supports, learnt on first use (forks differ a lot)
+	caps map[string]bool
 }
 
 func BTCDialer(url, user, pass string, sub Subsidy) Dialer {
@@ -60,7 +64,7 @@ func BTCDialer(url, user, pass string, sub Subsidy) Dialer {
 			return nil, err
 		}
 		nctx, cancel := context.WithCancel(ctx)
-		return &btcNode{c: c, ctx: nctx, cancel: cancel, sub: sub}, nil
+		return &btcNode{c: c, ctx: nctx, cancel: cancel, sub: sub, caps: map[string]bool{}}, nil
 	}
 }
 
@@ -71,9 +75,29 @@ func (n *btcNode) call(method string, out any, params ...any) error {
 	return n.c.Call(n.ctx, method, out, params...)
 }
 
-var subverRe = regexp.MustCompile(`^/?([^:/]+):([^/(]+)`)
+// try runs a call that the node may not support: a node error marks the
+// variant unsupported (skipped from then on), a transport error is returned.
+func (n *btcNode) try(name string, method string, out any, params ...any) (ok bool, err error) {
+	n.mu.Lock()
+	bad := n.caps["no-"+name]
+	n.mu.Unlock()
+	if bad {
+		return false, nil
+	}
+	err = n.call(method, out, params...)
+	var rerr *rpc.Error
+	if errors.As(err, &rerr) {
+		n.mu.Lock()
+		n.caps["no-"+name] = true
+		n.mu.Unlock()
+		return false, nil
+	}
+	return err == nil, err
+}
 
-// Info: "/Ravencoin:4.8.0/" -> "Ravencoin/v4.8.0", net = chain name ("main").
+// Info: "/Ravencoin:4.8.0/" -> "Ravencoin/v4.8.0" (the last part of a
+// multi-part subversion: "/pearlwire:0.5.0/pearld:1.5.0/" -> "pearld/v1.5.0"),
+// net = chain name ("main").
 func (n *btcNode) Info() (string, any, any, error) {
 	var ni struct {
 		Subversion string `json:"subversion"`
@@ -87,40 +111,50 @@ func (n *btcNode) Info() (string, any, any, error) {
 	if err := n.call("getblockchaininfo", &bi); err != nil {
 		return "", nil, nil, err
 	}
-	node := strings.Trim(ni.Subversion, "/")
-	if m := subverRe.FindStringSubmatch(ni.Subversion); m != nil {
-		node = m[1] + "/v" + m[2]
+	return subverName(ni.Subversion), bi.Chain, nil, nil
+}
+
+func subverName(sv string) string {
+	parts := strings.Split(strings.Trim(sv, "/"), "/")
+	last := parts[len(parts)-1]
+	if i := strings.IndexByte(last, '('); i >= 0 {
+		last = last[:i]
 	}
-	return node, bi.Chain, nil, nil
+	if name, ver, ok := strings.Cut(last, ":"); ok {
+		return name + "/v" + ver
+	}
+	return last
+}
+
+type btcTx struct {
+	Txid string `json:"txid"`
+	Vout []struct {
+		Value        float64 `json:"value"`
+		ScriptPubKey struct {
+			Addresses []string `json:"addresses"`
+			Address   string   `json:"address"`
+		} `json:"scriptPubKey"`
+	} `json:"vout"`
 }
 
 type btcBlock struct {
-	Hash         string  `json:"hash"`
-	Height       float64 `json:"height"`
-	Size         float64 `json:"size"`
-	MerkleRoot   string  `json:"merkleroot"`
-	Time         float64 `json:"time"`
-	Difficulty   float64 `json:"difficulty"`
-	Chainwork    string  `json:"chainwork"`
-	PreviousHash string  `json:"previousblockhash"`
-	Tx           []struct {
-		Txid string `json:"txid"`
-		Vin  []struct {
-			Coinbase string `json:"coinbase"`
-		} `json:"vin"`
-		Vout []struct {
-			Value        float64 `json:"value"`
-			ScriptPubKey struct {
-				Addresses []string `json:"addresses"`
-				Address   string   `json:"address"`
-			} `json:"scriptPubKey"`
-		} `json:"vout"`
-	} `json:"tx"`
+	Hash         string            `json:"hash"`
+	Height       float64           `json:"height"`
+	Size         float64           `json:"size"`
+	MerkleRoot   string            `json:"merkleroot"`
+	Time         float64           `json:"time"`
+	Difficulty   float64           `json:"difficulty"`
+	Chainwork    string            `json:"chainwork"`
+	PreviousHash string            `json:"previousblockhash"`
+	Tx           []json.RawMessage `json:"tx"` // txids (verbosity 1) or objects (2)
+	NTx          float64           `json:"nTx"`
+	TxCount      float64           `json:"txcount"`
 }
 
 // Block maps a bitcoind block onto the netstats (Ethereum) block format:
 // miner = first paid coinbase address, totalDifficulty = chainwork, no gas,
-// no uncles; fees = coinbase outputs minus the block reward (coins).
+// no uncles; fees in coins (getblockstats, else coinbase minus the reward,
+// else unknown).
 func (n *btcNode) Block(ref any) (map[string]any, error) {
 	var hash string
 	switch v := ref.(type) {
@@ -141,37 +175,57 @@ func (n *btcNode) Block(ref any) (map[string]any, error) {
 			return nil, err
 		}
 	}
+
+	// light block first (BTC blocks have thousands of transactions)
 	var b btcBlock
-	if err := n.call("getblock", &b, hash, 2); err != nil {
+	if err := n.call("getblock", &b, hash, 1); err != nil {
 		return nil, err
 	}
+	var full []btcTx
+	if len(b.Tx) == 0 && (b.NTx > 0 || b.TxCount > 0) {
+		// verbosity 1 without the tx list (Nexa): take the full block
+		if err := n.call("getblock", &b, hash, 2); err != nil {
+			return nil, err
+		}
+	}
 	txs := make([]any, 0, len(b.Tx))
+	for _, raw := range b.Tx {
+		var id string
+		if json.Unmarshal(raw, &id) != nil {
+			var t btcTx
+			_ = json.Unmarshal(raw, &t)
+			full = append(full, t)
+			id = t.Txid
+		}
+		txs = append(txs, id)
+	}
+
+	var coinbase *btcTx
+	if len(full) > 0 {
+		coinbase = &full[0] // the first transaction is the coinbase
+	} else if len(txs) > 0 {
+		coinbase = n.coinbase(txs[0].(string), hash)
+	}
+
 	var miner any = ""
-	var fees any // unknown unless the block has a coinbase
-	for i, tx := range b.Tx {
-		txs = append(txs, tx.Txid)
-		if i == 0 && len(tx.Vin) > 0 && tx.Vin[0].Coinbase != "" {
-			var out int64
-			for _, o := range tx.Vout {
-				out += int64(math.Round(o.Value * 1e8))
+	var cbOut int64 = -1
+	if coinbase != nil {
+		cbOut = 0
+		for _, o := range coinbase.Vout {
+			cbOut += int64(math.Round(o.Value * 1e8))
+		}
+		for _, o := range coinbase.Vout {
+			addr := o.ScriptPubKey.Address
+			if addr == "" && len(o.ScriptPubKey.Addresses) > 0 {
+				addr = o.ScriptPubKey.Addresses[0]
 			}
-			if f := out - n.sub.at(int64(b.Height)); f > 0 {
-				fees = float64(f) / 1e8
-			} else {
-				fees = float64(0)
-			}
-			for _, o := range tx.Vout {
-				addr := o.ScriptPubKey.Address
-				if addr == "" && len(o.ScriptPubKey.Addresses) > 0 {
-					addr = o.ScriptPubKey.Addresses[0]
-				}
-				if o.Value > 0 && addr != "" {
-					miner = addr
-					break
-				}
+			if o.Value > 0 && addr != "" {
+				miner = addr
+				break
 			}
 		}
 	}
+
 	work := 0.0
 	if w, ok := new(big.Int).SetString(b.Chainwork, 16); ok {
 		work, _ = new(big.Float).SetInt(w).Float64()
@@ -186,22 +240,73 @@ func (n *btcNode) Block(ref any) (map[string]any, error) {
 		"totalDifficulty":  work,
 		"transactionsRoot": b.MerkleRoot,
 		"size":             b.Size,
-		"fees":             fees,
+		"fees":             n.fees(hash, int64(b.Height), cbOut),
 		"gasUsed":          float64(0),
 		"gasLimit":         float64(0),
-		"transactions":     txs,
-		"uncles":           []any{},
+		// the count only: BTC blocks have thousands of txids, too much to
+		// send in history and to keep on the server
+		"transactions": []any{},
+		"txCount":      float64(len(txs)),
+		"uncles":       []any{},
 	}, nil
+}
+
+// coinbase fetches the coinbase tx: with the block hash (works without
+// txindex on modern nodes), without it (older forks), or nil.
+func (n *btcNode) coinbase(txid, blockHash string) *btcTx {
+	var t btcTx
+	if ok, _ := n.try("rawtx-blockhash", "getrawtransaction", &t, txid, 1, blockHash); ok {
+		return &t
+	}
+	if ok, _ := n.try("rawtx", "getrawtransaction", &t, txid, 1); ok {
+		return &t
+	}
+	var b struct {
+		Tx []btcTx `json:"tx"`
+	}
+	if ok, _ := n.try("block-verbose", "getblock", &b, blockHash, 2); ok && len(b.Tx) > 0 {
+		return &b.Tx[0]
+	}
+	return nil
+}
+
+// fees: getblockstats totalfee when the node has it (BTC sats, BCH/Nexa
+// coins), else coinbase outputs minus the reward schedule, else nil.
+func (n *btcNode) fees(hash string, height, cbOut int64) any {
+	var st struct {
+		TotalFee json.Number `json:"totalfee"`
+		Subsidy  json.Number `json:"subsidy"`
+	}
+	if ok, _ := n.try("blockstats", "getblockstats", &st, hash, []string{"totalfee", "subsidy"}); ok {
+		f, err := st.TotalFee.Float64()
+		if err == nil {
+			if !strings.ContainsAny(string(st.Subsidy), ".eE") {
+				f /= 1e8 // integers are satoshis (Bitcoin Core)
+			}
+			return f
+		}
+	}
+	if cbOut < 0 || n.sub.Start <= 0 {
+		return nil
+	}
+	if f := cbOut - n.sub.at(height); f > 0 {
+		return float64(f) / 1e8
+	}
+	return float64(0)
 }
 
 func (n *btcNode) Pending() (float64, error) {
 	var m struct {
 		Size float64 `json:"size"`
 	}
-	if err := n.call("getmempoolinfo", &m); err != nil {
-		return 0, err
+	if ok, err := n.try("mempoolinfo", "getmempoolinfo", &m); ok || err != nil {
+		return m.Size, err
 	}
-	return m.Size, nil
+	var pool []json.RawMessage
+	if ok, err := n.try("rawmempool", "getrawmempool", &pool); ok || err != nil {
+		return float64(len(pool)), err
+	}
+	return 0, nil
 }
 
 func (n *btcNode) Syncing() (any, error) {
@@ -228,8 +333,18 @@ func (n *btcNode) Syncing() (any, error) {
 
 func (n *btcNode) Stats() (NodeStats, error) {
 	var peers float64
-	if err := n.call("getconnectioncount", &peers); err != nil {
+	ok, err := n.try("connectioncount", "getconnectioncount", &peers)
+	if err != nil {
 		return NodeStats{}, err
+	}
+	if !ok { // zebrad
+		var ni struct {
+			Connections float64 `json:"connections"`
+		}
+		if err := n.call("getnetworkinfo", &ni); err != nil {
+			return NodeStats{}, err
+		}
+		peers = ni.Connections
 	}
 	s, err := n.Syncing()
 	if err != nil {

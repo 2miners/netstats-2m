@@ -8,6 +8,11 @@
 //	                     old RPC_HOST, RPC_PORT names work too, WS_* wins
 //	RPC_HOST, RPC_PORT   btc: node HTTP RPC (default localhost:8766)
 //	RPC_USER, RPC_PASSWORD  btc: rpcuser / rpcpassword of the node
+//	CHAIN=monero|ergo|ckb|beam|grin|ae|substrate  other node APIs, polled:
+//	                     RPC_HOST, RPC_PORT, RPC_USER, RPC_PASSWORD (monero
+//	                     digest login, grin foreign API secret),
+//	                     RPC_OWNER_PASSWORD (grin owner API), NODE_NAME,
+//	                     POLL_INTERVAL (default 1s)
 //	SUBSIDY_START, SUBSIDY_HALVING  btc: block reward schedule to tell fees
 //	                     from the reward (default Ravencoin: 5000, 2100000)
 //	WS_SERVER            netstats server, e.g. wss://ethw-stats.2miners.com
@@ -32,6 +37,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/2miners/netstats-2m/internal/camel"
 	"github.com/2miners/netstats-2m/internal/reporter"
@@ -174,8 +180,28 @@ func main() {
 			sub.Halving = n
 		}
 		dial = reporter.BTCDialer(rpcURL, os.Getenv("RPC_USER"), os.Getenv("RPC_PASSWORD"), sub)
+	case "monero", "ergo", "ckb", "beam", "grin", "ae", "substrate":
+		rpcURL = "http://" + getenv("RPC_HOST", "localhost") + ":" + os.Getenv("RPC_PORT")
+		poll := time.Second
+		if v := os.Getenv("POLL_INTERVAL"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil {
+				log.Error("bad POLL_INTERVAL", "value", v)
+				os.Exit(1)
+			}
+			poll = d
+		}
+		var err error
+		dial, err = reporter.ChainDialer(reporter.ChainConfig{
+			Kind: chain, URL: rpcURL, User: os.Getenv("RPC_USER"), Pass: os.Getenv("RPC_PASSWORD"),
+			OwnerPass: os.Getenv("RPC_OWNER_PASSWORD"), Name: os.Getenv("NODE_NAME"), Poll: poll,
+		})
+		if err != nil {
+			log.Error("chain", "err", err)
+			os.Exit(1)
+		}
 	default:
-		log.Error("unknown CHAIN, want eth or btc", "chain", chain)
+		log.Error("unknown CHAIN, want eth, btc, monero, ergo, ckb, beam, grin, ae or substrate", "chain", chain)
 		os.Exit(1)
 	}
 

@@ -10,6 +10,15 @@ import (
 	"sync/atomic"
 )
 
+// Error is an error answer of the node (as opposed to a transport error).
+type Error struct {
+	Method  string
+	Code    int
+	Message string
+}
+
+func (e *Error) Error() string { return fmt.Sprintf("%s: %s (code %d)", e.Method, e.Message, e.Code) }
+
 // HTTPClient is a bitcoind-style JSON-RPC client (HTTP POST + basic auth),
 // used for ravend and other Bitcoin forks.
 type HTTPClient struct {
@@ -61,7 +70,7 @@ func (c *HTTPClient) Call(ctx context.Context, method string, out any, params ..
 		return fmt.Errorf("%s: HTTP %d: %.200s", method, resp.StatusCode, bytes.TrimSpace(data))
 	}
 	if r.Error != nil {
-		return fmt.Errorf("%s: %s (code %d)", method, r.Error.Message, r.Error.Code)
+		return &Error{Method: method, Code: r.Error.Code, Message: r.Error.Message}
 	}
 	if out != nil {
 		return json.Unmarshal(r.Result, out)

@@ -46,6 +46,7 @@ One env file per node, see [example.env](example.env) (Ethereum) or [example-rvn
 | `CHAIN` | `eth` (default) or `btc` for Bitcoin forks |
 | `RPC_HOST`, `RPC_PORT`, `RPC_USER`, `RPC_PASSWORD` | `CHAIN=btc`: node HTTP RPC (default `localhost:8766`, the ravend port) and its `rpcuser` / `rpcpassword` |
 | `SUBSIDY_START`, `SUBSIDY_HALVING` | `CHAIN=btc`: block reward at height 0 and the halving interval, so fees can be told from the reward in the coinbase (default Ravencoin: `5000`, `2100000`; Bitcoin: `50`, `210000`) |
+| `CHAIN=monero`, `ergo`, `ckb`, `beam`, `grin`, `ae`, `substrate` | other node APIs, polled every `POLL_INTERVAL` (default `1s`): Zephyr (monerod json_rpc, `RPC_USER`/`RPC_PASSWORD` = rpc-login, digest auth), Ergo REST, Nervos CKB JSON-RPC, Beam explorer-node API, Grin/MWC node API v2 (`RPC_USER` `grin`/`mwcmain`, `RPC_PASSWORD` foreign secret, `RPC_OWNER_PASSWORD` owner secret for peers and sync), Aeternity HTTP API, Substrate (Quantus: difficulty and time from storage). `NODE_NAME` names the node on the page |
 | `WS_SERVER` | netstats server: `wss://ethw-stats.2miners.com`, `wss://etc-stats.2miners.com` or `wss://rvn-stats.2miners.com` |
 | `WS_SECRET` | server secret: the value in [example.env](example.env) (public on purpose, any pool may report its node) |
 | `INSTANCE_NAME` | name shown on the page; required with `NODE_ENV=production`. The node id on the server is its camelCase form |
