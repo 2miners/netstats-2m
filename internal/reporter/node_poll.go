@@ -36,6 +36,7 @@ type pollNode struct {
 	mu        sync.Mutex
 	syncStart float64
 	syncing   bool
+	syncedAt  time.Time
 }
 
 // pollDialer checks the node with tip() and returns a Node that polls it.
@@ -72,6 +73,12 @@ func (n *pollNode) Block(ref any) (map[string]any, error) {
 func (n *pollNode) Pending() (float64, error) { return n.api.pending(n.ctx) }
 
 func (n *pollNode) Syncing() (any, error) {
+	n.mu.Lock()
+	if !n.syncing && time.Since(n.syncedAt) < syncRecheck {
+		n.mu.Unlock()
+		return false, nil
+	}
+	n.mu.Unlock()
 	cur, high, syncing, err := n.api.sync(n.ctx)
 	if err != nil {
 		return nil, err
@@ -80,6 +87,7 @@ func (n *pollNode) Syncing() (any, error) {
 	defer n.mu.Unlock()
 	if !syncing {
 		n.syncing = false
+		n.syncedAt = time.Now()
 		return false, nil
 	}
 	if !n.syncing {
@@ -104,7 +112,7 @@ func (n *pollNode) Watch(log *slog.Logger, onHead func(ref any), onPending func(
 	go func() {
 		_, last, _ := n.api.tip(n.ctx)
 		head := time.NewTicker(n.every)
-		pend := time.NewTicker(2 * time.Second)
+		pend := time.NewTicker(btcPendingPoll)
 		defer head.Stop()
 		defer pend.Stop()
 		lastPending := -1.0

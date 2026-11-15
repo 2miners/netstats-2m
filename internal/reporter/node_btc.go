@@ -18,7 +18,10 @@ import (
 // blocks and the mempool are polled.
 const (
 	btcHeadPoll    = time.Second
-	btcPendingPoll = 2 * time.Second
+	btcPendingPoll = 5 * time.Second
+	// a synced node is re-checked this rarely (getblockchaininfo is one of the
+	// heavier bitcoind calls); while syncing every stats round asks again
+	syncRecheck = 30 * time.Second
 )
 
 // Subsidy is the block reward schedule, needed to tell fees from the reward
@@ -49,6 +52,7 @@ type btcNode struct {
 	mu        sync.Mutex
 	syncStart float64 // first height seen while syncing
 	syncing   bool
+	syncedAt  time.Time // last "not syncing" answer
 
 	// what this node supports, learnt on first use (forks differ a lot)
 	caps map[string]bool
@@ -310,6 +314,12 @@ func (n *btcNode) Pending() (float64, error) {
 }
 
 func (n *btcNode) Syncing() (any, error) {
+	n.mu.Lock()
+	if !n.syncing && time.Since(n.syncedAt) < syncRecheck {
+		n.mu.Unlock()
+		return false, nil
+	}
+	n.mu.Unlock()
 	var bi struct {
 		Blocks  float64 `json:"blocks"`
 		Headers float64 `json:"headers"`
@@ -322,6 +332,7 @@ func (n *btcNode) Syncing() (any, error) {
 	defer n.mu.Unlock()
 	if !bi.IBD && bi.Headers-bi.Blocks <= 2 {
 		n.syncing = false
+		n.syncedAt = time.Now()
 		return false, nil
 	}
 	if !n.syncing {
