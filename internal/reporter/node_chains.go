@@ -44,6 +44,9 @@ func ChainDialer(c ChainConfig) (Dialer, error) {
 		}
 	case "ae":
 		mk = func() chainAPI { return &aeAPI{c: rpc.NewJSON(c.URL, "", "")} }
+	case "kaspa":
+		addr := strings.TrimPrefix(c.URL, "http://")
+		mk = func() chainAPI { return &kaspaAPI{addr: addr} }
 	case "quai":
 		mk = func() chainAPI { return &quaiAPI{c: rpc.NewJSON(c.URL, c.User, c.Pass)} }
 	case "substrate":

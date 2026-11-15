@@ -8,7 +8,7 @@
 //	                     old RPC_HOST, RPC_PORT names work too, WS_* wins
 //	RPC_HOST, RPC_PORT   btc: node HTTP RPC (default localhost:8766)
 //	RPC_USER, RPC_PASSWORD  btc: rpcuser / rpcpassword of the node
-//	CHAIN=monero|ergo|ckb|beam|grin|ae|substrate|quai  other node APIs, polled:
+//	CHAIN=monero|ergo|ckb|beam|grin|ae|substrate|quai|kaspa  other node APIs, polled:
 //	                     RPC_HOST, RPC_PORT, RPC_USER, RPC_PASSWORD (monero
 //	                     digest login, grin foreign API secret),
 //	                     RPC_OWNER_PASSWORD (grin owner API), NODE_NAME,
@@ -180,7 +180,7 @@ func main() {
 			sub.Halving = n
 		}
 		dial = reporter.BTCDialer(rpcURL, os.Getenv("RPC_USER"), os.Getenv("RPC_PASSWORD"), sub)
-	case "monero", "ergo", "ckb", "beam", "grin", "ae", "substrate", "quai":
+	case "monero", "ergo", "ckb", "beam", "grin", "ae", "substrate", "quai", "kaspa":
 		rpcURL = "http://" + getenv("RPC_HOST", "localhost") + ":" + os.Getenv("RPC_PORT")
 		poll := time.Second
 		if v := os.Getenv("POLL_INTERVAL"); v != "" {
@@ -190,6 +190,9 @@ func main() {
 				os.Exit(1)
 			}
 			poll = d
+		}
+		if chain == "kaspa" {
+			info["canUpdateHistory"] = false // a DAG has no blocks by height
 		}
 		var err error
 		dial, err = reporter.ChainDialer(reporter.ChainConfig{
@@ -201,7 +204,7 @@ func main() {
 			os.Exit(1)
 		}
 	default:
-		log.Error("unknown CHAIN, want eth, btc, monero, ergo, ckb, beam, grin, ae, substrate or quai", "chain", chain)
+		log.Error("unknown CHAIN, want eth, btc, monero, ergo, ckb, beam, grin, ae, substrate, quai or kaspa", "chain", chain)
 		os.Exit(1)
 	}
 
