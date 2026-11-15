@@ -121,7 +121,7 @@ func main() {
 		"port":             port,
 		"os":               runtime.GOOS,
 		"os_v":             osRelease(),
-		"client":           version,
+		"client":           strings.TrimPrefix(version, "v"),
 		"canUpdateHistory": true,
 	}
 
