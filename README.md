@@ -7,7 +7,7 @@ This is the backend service which runs along with your EthereumPoW (ETHW) node, 
 
 ## Prerequisite
 * an ETHW node (ETHW Core / geth-compatible client) with HTTP JSON-RPC enabled
-* node.js and npm
+* node.js 22.12+ and npm
 * [pm2](https://pm2.keymetrics.io/) (`npm install -g pm2`)
 
 ## Configuration
