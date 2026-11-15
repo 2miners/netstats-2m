@@ -1,6 +1,6 @@
 # Go netstats client: `make build`, `make test`, `make release`.
 BIN     := build/bin/netstats-2m
-VERSION := $(shell git describe --always --dirty 2>/dev/null || echo dev)
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 export GOTOOLCHAIN := local
 
