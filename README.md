@@ -10,12 +10,26 @@ A single static Go binary: no Node.js, npm or PM2.
 * A node with the WebSocket RPC enabled (`--ws`, APIs `eth,net,web3`)
 * Go 1.26+ to build (or a prebuilt linux/amd64 binary)
 
+## Download
+
+Prebuilt static binaries for linux amd64 and arm64 are on the [releases page](https://github.com/2miners/netstats-2m/releases):
+
+```bash
+curl -LO https://github.com/2miners/netstats-2m/releases/latest/download/SHA256SUMS
+curl -LO https://github.com/2miners/netstats-2m/releases/download/v1.0.0/netstats-2m-v1.0.0-linux-amd64.tar.gz   # or -linux-arm64
+sha256sum -c --ignore-missing SHA256SUMS
+tar xzf netstats-2m-v1.0.0-linux-amd64.tar.gz
+```
+
+Each archive has the binary, `example.env`, the systemd unit, README and LICENSE.
+
 ## Build
 
 ```bash
 git clone https://github.com/2miners/netstats-2m
 cd netstats-2m
 make build            # build/bin/netstats-2m (linux/amd64, static)
+make release          # build/release: linux amd64 + arm64 archives and SHA256SUMS
 ```
 
 ## Configure
