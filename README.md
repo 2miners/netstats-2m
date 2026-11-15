@@ -7,7 +7,7 @@ A single static Go binary: no Node.js, npm or PM2.
 
 ## Requirements
 
-* A node with the WebSocket RPC enabled (`--ws`, APIs `eth,net,web3`)
+* A node with the WebSocket RPC enabled, e.g. `--ws --ws.port 8546 --ws.origins '*' --ws.api admin,eth,net,web3,txpool` (the client needs `eth,net,web3`; HTTP RPC is not used)
 * Go 1.26+ to build, or a prebuilt linux amd64/arm64 binary
 
 ## Download
@@ -38,7 +38,7 @@ One env file per node, see [example.env](example.env):
 
 | Var | Meaning |
 |---|---|
-| `RPC_HOST`, `RPC_PORT` | node WebSocket RPC (default `localhost:8545`) |
+| `WS_HOST`, `WS_PORT` | node WebSocket RPC, i.e. the `--ws.port` (default `localhost:8546`). `RPC_HOST`, `RPC_PORT` are accepted as the same setting (old JS client names); `WS_*` wins |
 | `WS_SERVER` | netstats server: `wss://ethw-stats.2miners.com` or `wss://etc-stats.2miners.com` |
 | `WS_SECRET` | server secret: the value in [example.env](example.env) (public on purpose, any pool may report its node) |
 | `INSTANCE_NAME` | name shown on the page; required with `NODE_ENV=production`. The node id on the server is its camelCase form |

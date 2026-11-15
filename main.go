@@ -2,7 +2,8 @@
 //
 // Configuration is the environment of the former JS client:
 //
-//	RPC_HOST, RPC_PORT   node WebSocket RPC (default localhost:8545)
+//	WS_HOST, WS_PORT     node WebSocket RPC (default localhost:8546); the
+//	                     old RPC_HOST, RPC_PORT names work too, WS_* wins
 //	WS_SERVER            netstats server, e.g. wss://ethw-stats.2miners.com
 //	WS_SECRET            server secret
 //	INSTANCE_NAME        name on the page (required with NODE_ENV=production)
@@ -59,6 +60,16 @@ func loadEnvFile(path string) error {
 func getenv(k, def string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
+	}
+	return def
+}
+
+// nodeEnv returns the first non-empty of the given variables, else def.
+func nodeEnv(def string, keys ...string) string {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
 	}
 	return def
 }
@@ -133,7 +144,7 @@ func main() {
 	cfg := reporter.Config{
 		ID:     camel.Case(name),
 		Info:   info,
-		RPCURL: "ws://" + getenv("RPC_HOST", "localhost") + ":" + getenv("RPC_PORT", "8545"),
+		RPCURL: "ws://" + nodeEnv("localhost", "WS_HOST", "RPC_HOST") + ":" + nodeEnv("8546", "WS_PORT", "RPC_PORT"),
 		Server: getenv("WS_SERVER", "ws://localhost:3000"),
 		Secret: secret,
 		Log:    log,
