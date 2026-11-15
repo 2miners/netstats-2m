@@ -1,9 +1,13 @@
-// netstats-2m reports an Ethereum-family node to a netstats server.
+// netstats-2m reports an Ethereum-family node, or a Bitcoin fork such as
+// ravend, to a netstats server.
 //
 // Configuration is the environment of the former JS client:
 //
-//	WS_HOST, WS_PORT     node WebSocket RPC (default localhost:8546); the
+//	CHAIN                eth (default) or btc (bitcoind-style JSON-RPC: RVN, ...)
+//	WS_HOST, WS_PORT     eth: node WebSocket RPC (default localhost:8546); the
 //	                     old RPC_HOST, RPC_PORT names work too, WS_* wins
+//	RPC_HOST, RPC_PORT   btc: node HTTP RPC (default localhost:8766)
+//	RPC_USER, RPC_PASSWORD  btc: rpcuser / rpcpassword of the node
 //	WS_SERVER            netstats server, e.g. wss://ethw-stats.2miners.com
 //	WS_SECRET            server secret
 //	INSTANCE_NAME        name on the page (required with NODE_ENV=production)
@@ -141,10 +145,25 @@ func main() {
 		secret = "eth-net-stats-has-a-secret"
 	}
 
+	var rpcURL string
+	var dial reporter.Dialer
+	switch chain := getenv("CHAIN", "eth"); chain {
+	case "eth":
+		rpcURL = "ws://" + nodeEnv("localhost", "WS_HOST", "RPC_HOST") + ":" + nodeEnv("8546", "WS_PORT", "RPC_PORT")
+		dial = reporter.EthDialer(rpcURL)
+	case "btc":
+		rpcURL = "http://" + getenv("RPC_HOST", "localhost") + ":" + getenv("RPC_PORT", "8766") + "/"
+		dial = reporter.BTCDialer(rpcURL, os.Getenv("RPC_USER"), os.Getenv("RPC_PASSWORD"))
+	default:
+		log.Error("unknown CHAIN, want eth or btc", "chain", chain)
+		os.Exit(1)
+	}
+
 	cfg := reporter.Config{
 		ID:     camel.Case(name),
 		Info:   info,
-		RPCURL: "ws://" + nodeEnv("localhost", "WS_HOST", "RPC_HOST") + ":" + nodeEnv("8546", "WS_PORT", "RPC_PORT"),
+		Dial:   dial,
+		RPCURL: rpcURL,
 		Server: getenv("WS_SERVER", "ws://localhost:3000"),
 		Secret: secret,
 		Log:    log,

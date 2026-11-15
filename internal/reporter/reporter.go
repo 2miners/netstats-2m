@@ -1,5 +1,6 @@
 // Package reporter is the Go port of the netstats client (lib/node.js): it
-// follows one node over WebSocket JSON-RPC and reports to the netstats server.
+// follows one node (Ethereum WebSocket JSON-RPC or bitcoind HTTP JSON-RPC,
+// see Node) and reports to the netstats server.
 package reporter
 
 import (
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/2miners/netstats-2m/internal/primus"
-	"github.com/2miners/netstats-2m/internal/rpc"
 )
 
 const (
@@ -27,12 +27,13 @@ const (
 
 // Config is the env of the JS client.
 type Config struct {
-	ID       string // camelCase(INSTANCE_NAME)
-	Info     map[string]any
-	RPCURL   string // ws://RPC_HOST:RPC_PORT
-	Server   string // WS_SERVER
-	Secret   string // WS_SECRET
-	Log      *slog.Logger
+	ID     string // camelCase(INSTANCE_NAME)
+	Info   map[string]any
+	Dial   Dialer
+	RPCURL string // node RPC address, for logs
+	Server string // WS_SERVER
+	Secret string // WS_SECRET
+	Log    *slog.Logger
 }
 
 type stats struct {
@@ -58,16 +59,16 @@ type Reporter struct {
 	lastPending float64
 	tries, down float64
 
-	client   *rpc.Client // current RPC connection (nil when down)
-	rpcUp    bool        // _web3 in JS: connected and initialised
+	client   Node // current node connection (nil when down)
+	rpcUp    bool // _web3 in JS: connected and initialised
 	server   *primus.Conn
 	socketUp bool
 
-	queue    *blockQueue
-	serverOnce sync.Once
-	statsBusy  bool // a getStats round is in flight
-	ctx        context.Context
-	chain    chainDebounce
+	queue          *blockQueue
+	serverOnce     sync.Once
+	statsBusy      bool // a getStats round is in flight
+	ctx            context.Context
+	chain          chainDebounce
 	lastPendingLog time.Time
 	pendingTimer   *time.Timer
 }
@@ -102,7 +103,7 @@ func (r *Reporter) rpcLoop(ctx context.Context) {
 	attempt := 0
 	for ctx.Err() == nil {
 		r.log.Info("starting RPC connection", "url", r.cfg.RPCURL)
-		c, err := rpc.Dial(ctx, r.cfg.RPCURL)
+		c, err := r.cfg.Dial(ctx)
 		if err != nil {
 			r.log.Warn("RPC connection attempt failed", "attempt", attempt, "err", err, "retry_in", connectionRetry)
 			attempt++
@@ -138,20 +139,18 @@ func (r *Reporter) rpcLoop(ctx context.Context) {
 }
 
 // fail drops the current RPC connection (rpcLoop marks the node inactive and reconnects).
-func (r *Reporter) fail(c *rpc.Client, err error) {
+func (r *Reporter) fail(c Node, err error) {
 	r.log.Warn("RPC error, reconnecting", "err", err)
 	c.Close()
 }
 
-func (r *Reporter) init(c *rpc.Client) {
+func (r *Reporter) init(c Node) {
 	r.getInfo(c)
 	// like the JS client: the server connection starts after the first node connection
 	r.serverOnce.Do(func() { go r.serverLoop(r.ctx) })
 	// syncing check, then subscriptions (once per connection)
 	go func() {
-		var raw json.RawMessage
-		if err := c.Call("eth_syncing", &raw); err == nil {
-			sync := rpc.FormatSyncing(raw)
+		if sync, err := c.Syncing(); err == nil {
 			if m, ok := sync.(map[string]any); ok {
 				r.mu.Lock()
 				setProgress(m)
@@ -169,7 +168,7 @@ func (r *Reporter) init(c *rpc.Client) {
 				r.mu.Unlock()
 			}
 		}
-		r.setFilters(c)
+		c.Watch(r.log, r.onChainHead, r.onPendingTx)
 	}()
 	r.mu.Lock()
 	up := r.socketUp
@@ -179,55 +178,18 @@ func (r *Reporter) init(c *rpc.Client) {
 	}
 }
 
-func (r *Reporter) getInfo(c *rpc.Client) {
-	var node, net string
-	if err := c.Call("web3_clientVersion", &node); err != nil {
+func (r *Reporter) getInfo(c Node) {
+	node, net, coinbase, err := c.Info()
+	if err != nil {
 		r.log.Error("couldn't get version", "err", err)
 		return
-	}
-	if err := c.Call("net_version", &net); err != nil {
-		r.log.Error("couldn't get version", "err", err)
-		return
-	}
-	var coinbase any
-	if err := c.Call("eth_coinbase", &coinbase); err != nil {
-		coinbase = nil
 	}
 	r.mu.Lock()
 	r.cfg.Info["node"] = node
-	if n, err := parseIntJS(net); err == nil {
-		r.cfg.Info["net"] = n
-	} else {
-		r.cfg.Info["net"] = nil
-	}
+	r.cfg.Info["net"] = net
 	r.cfg.Info["api"] = "1.0.0"
 	r.cfg.Info["coinbase"] = coinbase
 	r.mu.Unlock()
-}
-
-func (r *Reporter) setFilters(c *rpc.Client) {
-	err := c.Subscribe("newHeads", func(raw json.RawMessage) {
-		var h struct {
-			Hash *string `json:"hash"`
-		}
-		_ = json.Unmarshal(raw, &h)
-		var ref any = "latest"
-		if h.Hash != nil {
-			ref = *h.Hash
-		}
-		r.onChainHead(ref)
-	})
-	if err != nil {
-		r.log.Error("couldn't set up chain filter", "err", err)
-	} else {
-		r.log.Info("installed chain filter")
-	}
-	err = c.Subscribe("newPendingTransactions", func(json.RawMessage) { r.onPendingTx() })
-	if err != nil {
-		r.log.Error("couldn't set up pending filter", "err", err)
-	} else {
-		r.log.Info("installed pending filter")
-	}
 }
 
 // chainDebounce is the chain-filter throttling of the JS client.
@@ -301,7 +263,7 @@ func (r *Reporter) onPendingTx() {
 	r.mu.Unlock()
 }
 
-func (r *Reporter) rpcClient() *rpc.Client {
+func (r *Reporter) rpcClient() Node {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.rpcUp {
@@ -310,33 +272,12 @@ func (r *Reporter) rpcClient() *rpc.Client {
 	return r.client
 }
 
-func (r *Reporter) getBlock(c *rpc.Client, ref any) (map[string]any, error) {
-	var raw json.RawMessage
-	var err error
-	switch v := ref.(type) {
-	case string:
-		if len(v) == 66 {
-			err = c.Call("eth_getBlockByHash", &raw, v, false)
-		} else {
-			err = c.Call("eth_getBlockByNumber", &raw, v, false)
-		}
-	case float64:
-		err = c.Call("eth_getBlockByNumber", &raw, rpc.BlockTag(v), false)
-	default:
-		err = c.Call("eth_getBlockByNumber", &raw, "latest", false)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return rpc.FormatBlock(raw), nil
-}
-
 func (r *Reporter) fetchQueuedBlock(ref any) {
 	c := r.rpcClient()
 	if c == nil {
 		return
 	}
-	b, err := r.getBlock(c, ref)
+	b, err := c.Block(ref)
 	r.validateLatestBlock(b, err)
 }
 
@@ -345,7 +286,7 @@ func (r *Reporter) getLatestBlock() {
 	if c == nil {
 		return
 	}
-	b, err := r.getBlock(c, "latest")
+	b, err := c.Block("latest")
 	r.validateLatestBlock(b, err)
 }
 
@@ -416,12 +357,11 @@ func (r *Reporter) getPending() {
 	if c == nil {
 		return
 	}
-	var hex string
-	if err := c.Call("eth_getBlockTransactionCountByNumber", &hex, "pending"); err != nil {
+	pending, err := c.Pending()
+	if err != nil {
 		r.log.Debug("getPending error", "err", err)
 		return
 	}
-	pending, _ := rpc.HexToFloat(hex)
 	r.mu.Lock()
 	r.st.Pending = pending
 	changed := r.lastPending != pending
@@ -451,55 +391,21 @@ func (r *Reporter) getStats(forced bool) {
 		return
 	}
 
-	type res struct {
-		peers, gasPrice json.RawMessage
-		mining          bool
-		syncing         json.RawMessage
-		err             error
-	}
-	var out res
-	var wg sync.WaitGroup
-	var emu sync.Mutex
-	setErr := func(e error) {
-		emu.Lock()
-		if out.err == nil {
-			out.err = e
-		}
-		emu.Unlock()
-	}
-	wg.Add(4)
-	go func() { defer wg.Done(); setErr(c.Call("net_peerCount", &out.peers)) }()
-	go func() {
-		defer wg.Done()
-		// newer nodes drop eth_mining: an error means "not mining", not a dead node
-		var m bool
-		if c.Call("eth_mining", &m) == nil {
-			out.mining = m
-		}
-	}()
-	go func() { defer wg.Done(); setErr(c.Call("eth_gasPrice", &out.gasPrice)) }()
-	go func() { defer wg.Done(); setErr(c.Call("eth_syncing", &out.syncing)) }()
-	wg.Wait()
+	out, err := c.Stats()
 
 	r.mu.Lock()
 	r.tries++
-	if out.err != nil {
+	if err != nil {
 		r.mu.Unlock()
-		r.log.Warn("getStats error", "err", out.err)
-		r.fail(c, out.err)
+		r.log.Warn("getStats error", "err", err)
+		r.fail(c, err)
 		return
 	}
-	var peersHex, gasHex string
-	_ = json.Unmarshal(out.peers, &peersHex)
-	_ = json.Unmarshal(out.gasPrice, &gasHex)
-	peers, _ := rpc.HexToFloat(peersHex)
-	gas, _ := rpc.HexToDecimal(gasHex)
 	r.st.Active = true
-	r.st.Peers = peers
-	r.st.GasPrice = gas
-	r.st.Mining = out.mining
-	sync := rpc.FormatSyncing(out.syncing)
-	if m, ok := sync.(map[string]any); ok {
+	r.st.Peers = out.Peers
+	r.st.GasPrice = out.GasPrice
+	r.st.Mining = out.Mining
+	if m, ok := out.Syncing.(map[string]any); ok {
 		setProgress(m)
 		r.st.Syncing = m
 	} else {
@@ -572,7 +478,7 @@ func (r *Reporter) getHistory(list []float64) {
 	}
 	results := make([]any, 0, len(list))
 	for _, n := range list {
-		b, err := r.getBlock(c, n)
+		b, err := c.Block(n)
 		if err != nil {
 			r.log.Debug("history fetch failed", "err", err)
 			return
