@@ -61,8 +61,8 @@ Real environment variables override the file.
 ```bash
 useradd --system --home-dir /opt/netstats-2m --shell /usr/sbin/nologin netstats-2m
 install -d -o netstats-2m -g netstats-2m -m 0750 /opt/netstats-2m
-cp build/bin/netstats-2m /opt/netstats-2m/
-cp example.env /opt/netstats-2m/ethw.env      # edit it
+install -m 0755 build/bin/netstats-2m /opt/netstats-2m/
+install -o netstats-2m -m 0640 example.env /opt/netstats-2m/ethw.env      # edit it
 cp deploy/netstats-2m@.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now netstats-2m@ethw
