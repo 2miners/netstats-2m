@@ -545,9 +545,16 @@ func (r *Reporter) onServerEvent(c *primus.Conn, event string, args []json.RawMe
 	case "ready":
 		r.mu.Lock()
 		r.socketUp = true
+		cur, _ := r.st.Block.(map[string]any)
 		r.mu.Unlock()
 		r.log.Info("socket connection established")
 		go func() {
+			// a fresh server (restart) has no block for this node yet, and
+			// getLatestBlock sends nothing while the block is unchanged
+			// (up to 10 minutes on Bitcoin): resend the current one first
+			if n, _ := cur["number"].(float64); n > 0 {
+				r.emit("block", map[string]any{"id": r.cfg.ID, "block": cur})
+			}
 			r.getLatestBlock()
 			r.getPending()
 			r.getStats(true)
