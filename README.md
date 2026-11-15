@@ -45,6 +45,7 @@ One env file per node, see [example.env](example.env) (Ethereum) or [example-rvn
 | `WS_HOST`, `WS_PORT` | node WebSocket RPC, i.e. the `--ws.port` (default `localhost:8546`). `RPC_HOST`, `RPC_PORT` are accepted as the same setting (old JS client names); `WS_*` wins |
 | `CHAIN` | `eth` (default) or `btc` for Bitcoin forks |
 | `RPC_HOST`, `RPC_PORT`, `RPC_USER`, `RPC_PASSWORD` | `CHAIN=btc`: node HTTP RPC (default `localhost:8766`, the ravend port) and its `rpcuser` / `rpcpassword` |
+| `SUBSIDY_START`, `SUBSIDY_HALVING` | `CHAIN=btc`: block reward at height 0 and the halving interval, so fees can be told from the reward in the coinbase (default Ravencoin: `5000`, `2100000`; Bitcoin: `50`, `210000`) |
 | `WS_SERVER` | netstats server: `wss://ethw-stats.2miners.com`, `wss://etc-stats.2miners.com` or `wss://rvn-stats.2miners.com` |
 | `WS_SECRET` | server secret: the value in [example.env](example.env) (public on purpose, any pool may report its node) |
 | `INSTANCE_NAME` | name shown on the page; required with `NODE_ENV=production`. The node id on the server is its camelCase form |

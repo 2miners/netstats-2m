@@ -3,6 +3,7 @@ package reporter
 import (
 	"context"
 	"log/slog"
+	"math"
 	"math/big"
 	"regexp"
 	"strings"
@@ -19,7 +20,27 @@ const (
 	btcPendingPoll = 2 * time.Second
 )
 
+// Subsidy is the block reward schedule, needed to tell fees from the reward
+// in the coinbase: Start coins at height 0, halved every Halving blocks.
+type Subsidy struct {
+	Start   float64
+	Halving int64
+}
+
+// at returns the reward at height h in satoshis.
+func (s Subsidy) at(h int64) int64 {
+	if s.Halving <= 0 {
+		return 0
+	}
+	n := h / s.Halving
+	if n >= 63 {
+		return 0
+	}
+	return int64(math.Round(s.Start*1e8)) >> n
+}
+
 type btcNode struct {
+	sub    Subsidy
 	c      *rpc.HTTPClient
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -29,7 +50,7 @@ type btcNode struct {
 	syncing   bool
 }
 
-func BTCDialer(url, user, pass string) Dialer {
+func BTCDialer(url, user, pass string, sub Subsidy) Dialer {
 	return func(ctx context.Context) (Node, error) {
 		c := rpc.NewHTTP(url, user, pass)
 		var probe struct {
@@ -39,7 +60,7 @@ func BTCDialer(url, user, pass string) Dialer {
 			return nil, err
 		}
 		nctx, cancel := context.WithCancel(ctx)
-		return &btcNode{c: c, ctx: nctx, cancel: cancel}, nil
+		return &btcNode{c: c, ctx: nctx, cancel: cancel, sub: sub}, nil
 	}
 }
 
@@ -99,7 +120,7 @@ type btcBlock struct {
 
 // Block maps a bitcoind block onto the netstats (Ethereum) block format:
 // miner = first paid coinbase address, totalDifficulty = chainwork, no gas,
-// no uncles.
+// no uncles; fees = coinbase outputs minus the block reward (coins).
 func (n *btcNode) Block(ref any) (map[string]any, error) {
 	var hash string
 	switch v := ref.(type) {
@@ -126,9 +147,19 @@ func (n *btcNode) Block(ref any) (map[string]any, error) {
 	}
 	txs := make([]any, 0, len(b.Tx))
 	var miner any = ""
+	var fees any // unknown unless the block has a coinbase
 	for i, tx := range b.Tx {
 		txs = append(txs, tx.Txid)
 		if i == 0 && len(tx.Vin) > 0 && tx.Vin[0].Coinbase != "" {
+			var out int64
+			for _, o := range tx.Vout {
+				out += int64(math.Round(o.Value * 1e8))
+			}
+			if f := out - n.sub.at(int64(b.Height)); f > 0 {
+				fees = float64(f) / 1e8
+			} else {
+				fees = float64(0)
+			}
 			for _, o := range tx.Vout {
 				addr := o.ScriptPubKey.Address
 				if addr == "" && len(o.ScriptPubKey.Addresses) > 0 {
@@ -155,6 +186,7 @@ func (n *btcNode) Block(ref any) (map[string]any, error) {
 		"totalDifficulty":  work,
 		"transactionsRoot": b.MerkleRoot,
 		"size":             b.Size,
+		"fees":             fees,
 		"gasUsed":          float64(0),
 		"gasLimit":         float64(0),
 		"transactions":     txs,

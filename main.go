@@ -8,6 +8,8 @@
 //	                     old RPC_HOST, RPC_PORT names work too, WS_* wins
 //	RPC_HOST, RPC_PORT   btc: node HTTP RPC (default localhost:8766)
 //	RPC_USER, RPC_PASSWORD  btc: rpcuser / rpcpassword of the node
+//	SUBSIDY_START, SUBSIDY_HALVING  btc: block reward schedule to tell fees
+//	                     from the reward (default Ravencoin: 5000, 2100000)
 //	WS_SERVER            netstats server, e.g. wss://ethw-stats.2miners.com
 //	WS_SECRET            server secret
 //	INSTANCE_NAME        name on the page (required with NODE_ENV=production)
@@ -27,6 +29,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -153,7 +156,24 @@ func main() {
 		dial = reporter.EthDialer(rpcURL)
 	case "btc":
 		rpcURL = "http://" + getenv("RPC_HOST", "localhost") + ":" + getenv("RPC_PORT", "8766") + "/"
-		dial = reporter.BTCDialer(rpcURL, os.Getenv("RPC_USER"), os.Getenv("RPC_PASSWORD"))
+		sub := reporter.Subsidy{Start: 5000, Halving: 2100000} // Ravencoin
+		if v := os.Getenv("SUBSIDY_START"); v != "" {
+			f, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				log.Error("bad SUBSIDY_START", "value", v)
+				os.Exit(1)
+			}
+			sub.Start = f
+		}
+		if v := os.Getenv("SUBSIDY_HALVING"); v != "" {
+			n, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				log.Error("bad SUBSIDY_HALVING", "value", v)
+				os.Exit(1)
+			}
+			sub.Halving = n
+		}
+		dial = reporter.BTCDialer(rpcURL, os.Getenv("RPC_USER"), os.Getenv("RPC_PASSWORD"), sub)
 	default:
 		log.Error("unknown CHAIN, want eth or btc", "chain", chain)
 		os.Exit(1)
