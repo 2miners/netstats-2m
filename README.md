@@ -20,9 +20,9 @@ Prebuilt static binaries for linux amd64 and arm64 are on the [releases page](ht
 
 ```bash
 curl -LO https://github.com/2miners/netstats-2m/releases/latest/download/SHA256SUMS
-curl -LO https://github.com/2miners/netstats-2m/releases/download/v1.3.0/netstats-2m-v1.3.0-linux-amd64.tar.gz   # or -linux-arm64
+curl -LO https://github.com/2miners/netstats-2m/releases/download/v1.3.1/netstats-2m-v1.3.1-linux-amd64.tar.gz   # or -linux-arm64
 sha256sum -c --ignore-missing SHA256SUMS
-tar xzf netstats-2m-v1.3.0-linux-amd64.tar.gz
+tar xzf netstats-2m-v1.3.1-linux-amd64.tar.gz
 ```
 
 Each archive has the binary, `example.env` and `example-rvn.env`, the systemd unit, README and LICENSE.
