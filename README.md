@@ -1,13 +1,17 @@
 2Miners netstats client
 =======================
 
-Node-side reporter for the 2Miners network stats pages ([ETC](https://2miners.com/etc-stats/), [ETHW](https://2miners.com/ethw-stats/)). It runs next to an Ethereum-family node (core-geth, geth, ...), reads it over **WebSocket JSON-RPC** (`newHeads` / `newPendingTransactions` subscriptions plus periodic stats) and pushes the data over WebSockets (Primus protocol) to the 2Miners netstats server.
+Node-side reporter for the 2Miners network stats pages ([ETC](https://2miners.com/etc-stats/), [ETHW](https://2miners.com/ethw-stats/), [RVN](https://2miners.com/rvn-stats/)). It runs next to a node and pushes its data over WebSockets (Primus protocol) to the 2Miners netstats server:
+
+* **Ethereum family** (core-geth, geth, ...): **WebSocket JSON-RPC** (`newHeads` / `newPendingTransactions` subscriptions plus periodic stats).
+* **Bitcoin forks** (ravend, ...), `CHAIN=btc`: bitcoind-style **HTTP JSON-RPC**; new blocks are polled every second, the mempool every 2 s.
 
 A single static Go binary: no Node.js, npm or PM2.
 
 ## Requirements
 
-* A node with the WebSocket RPC enabled, e.g. `--ws --ws.port 8546 --ws.origins '*' --ws.api admin,eth,net,web3,txpool` (the client needs `eth,net,web3`; HTTP RPC is not used)
+* Ethereum: a node with the WebSocket RPC enabled, e.g. `--ws --ws.port 8546 --ws.origins '*' --ws.api admin,eth,net,web3,txpool` (the client needs `eth,net,web3`; HTTP RPC is not used)
+* Bitcoin forks: the node's RPC (`rpcuser` / `rpcpassword`, `rpcallowip` for the client's address); no wallet needed
 * Go 1.26+ to build, or a prebuilt linux amd64/arm64 binary
 
 ## Download
@@ -21,7 +25,7 @@ sha256sum -c --ignore-missing SHA256SUMS
 tar xzf netstats-2m-v1.0.2-linux-amd64.tar.gz
 ```
 
-Each archive has the binary, `example.env`, the systemd unit, README and LICENSE.
+Each archive has the binary, `example.env` and `example-rvn.env`, the systemd unit, README and LICENSE.
 
 ## Build
 
@@ -34,12 +38,14 @@ make release          # build/release: linux amd64 + arm64 archives and SHA256SU
 
 ## Configure
 
-One env file per node, see [example.env](example.env):
+One env file per node, see [example.env](example.env) (Ethereum) or [example-rvn.env](example-rvn.env) (Ravencoin):
 
 | Var | Meaning |
 |---|---|
 | `WS_HOST`, `WS_PORT` | node WebSocket RPC, i.e. the `--ws.port` (default `localhost:8546`). `RPC_HOST`, `RPC_PORT` are accepted as the same setting (old JS client names); `WS_*` wins |
-| `WS_SERVER` | netstats server: `wss://ethw-stats.2miners.com` or `wss://etc-stats.2miners.com` |
+| `CHAIN` | `eth` (default) or `btc` for Bitcoin forks |
+| `RPC_HOST`, `RPC_PORT`, `RPC_USER`, `RPC_PASSWORD` | `CHAIN=btc`: node HTTP RPC (default `localhost:8766`, the ravend port) and its `rpcuser` / `rpcpassword` |
+| `WS_SERVER` | netstats server: `wss://ethw-stats.2miners.com`, `wss://etc-stats.2miners.com` or `wss://rvn-stats.2miners.com` |
 | `WS_SECRET` | server secret: the value in [example.env](example.env) (public on purpose, any pool may report its node) |
 | `INSTANCE_NAME` | name shown on the page; required with `NODE_ENV=production`. The node id on the server is its camelCase form |
 | `CONTACT_DETAILS` | optional contact shown on the page |
