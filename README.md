@@ -1,7 +1,7 @@
 2Miners Network Stats Dashboard
 ============
 
-This is the backend service which runs along with your EthereumPoW (ETHW) node, fetches information from it through HTTP JSON-RPC and feeds it over WebSockets to the [2Miners ETHW network stats](https://ethw-stats.2miners.com) dashboard ([eth-netstats](https://github.com/2miners/eth-netstats)).
+This is the backend service which runs along with your EthereumPoW (ETHW) node, fetches information from it through HTTP JSON-RPC and feeds it over WebSockets to the [2Miners ETHW network stats](https://2miners.com/ethw-stats/) dashboard.
 
 # How to add your node
 
