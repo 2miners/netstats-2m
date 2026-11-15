@@ -44,6 +44,8 @@ func ChainDialer(c ChainConfig) (Dialer, error) {
 		}
 	case "ae":
 		mk = func() chainAPI { return &aeAPI{c: rpc.NewJSON(c.URL, "", "")} }
+	case "quai":
+		mk = func() chainAPI { return &quaiAPI{c: rpc.NewJSON(c.URL, c.User, c.Pass)} }
 	case "substrate":
 		mk = func() chainAPI { return &substrateAPI{c: rpc.NewJSON(c.URL, c.User, c.Pass), name: c.Name} }
 	default:
@@ -620,4 +622,87 @@ func (a *substrateAPI) sync(ctx context.Context) (float64, float64, bool, error)
 	}
 	syncing, _ := r["isSyncing"].(bool)
 	return cur, high, syncing, nil
+}
+
+// ---------------- Quai: go-quai zone chain JSON-RPC ----------------
+
+// quaiAPI follows the zone chain (the KawPoW blocks); every block carries
+// "algos": difficulty, hashrate and share time of KawPoW, SHA256 and Scrypt
+// from quai_getMiningInfo, shown as one card per algorithm on the page.
+type quaiAPI struct{ c *rpc.JSONClient }
+
+func (a *quaiAPI) call(ctx context.Context, method string, params any, out any) error {
+	return a.c.Call2(ctx, "/", method, params, out)
+}
+
+func (a *quaiAPI) getBlock(ctx context.Context, ref string) (map[string]any, error) {
+	var b map[string]any
+	if err := a.call(ctx, "quai_getBlockByNumber", []any{ref, false}, &b); err != nil {
+		return nil, err
+	}
+	if b == nil {
+		return nil, fmt.Errorf("quai: no block %s", ref)
+	}
+	return b, nil
+}
+
+func (a *quaiAPI) info(ctx context.Context) (string, any, error) {
+	// go-quai has no client-version call (extraData is the block producer's
+	// version, not ours), so the name only
+	var netv string
+	if err := a.call(ctx, "net_version", nil, &netv); err != nil {
+		return "", nil, err
+	}
+	return "go-quai", netv, nil
+}
+
+func (a *quaiAPI) tip(ctx context.Context) (float64, string, error) {
+	b, err := a.getBlock(ctx, "latest")
+	if err != nil {
+		return 0, "", err
+	}
+	return num(obj(b, "woHeader", "number")), str(b["hash"]), nil
+}
+
+func (a *quaiAPI) block(ctx context.Context, height float64) (map[string]any, error) {
+	b, err := a.getBlock(ctx, "0x"+strconv.FormatInt(int64(height), 16))
+	if err != nil {
+		return nil, err
+	}
+	wo := obj(b, "woHeader")
+	txs, _ := b["transactions"].([]any)
+	out := newBlock(num(obj(wo, "number")), str(b["hash"]), str(obj(wo, "parentHash")), num(obj(wo, "timestamp")),
+		str(obj(wo, "primaryCoinbase")), num(obj(wo, "difficulty")), 0, float64(len(txs)),
+		num(obj(b, "header", "size")), num(obj(b, "header", "totalFees"))/1e18)
+	var mi map[string]any
+	if a.call(ctx, "quai_getMiningInfo", nil, &mi) == nil {
+		algo := func(name, diff, hr, share string) map[string]any {
+			return map[string]any{"name": name, "difficulty": num(mi[diff]), "hashrate": num(mi[hr]), "shareTime": num(mi[share])}
+		}
+		out["algos"] = []any{
+			algo("KawPoW", "kawpowDifficulty", "kawpowHashRate", "avgKawpowShareTime"),
+			algo("SHA256", "shaDifficulty", "shaHashRate", "avgShaShareTime"),
+			algo("Scrypt", "scryptDifficulty", "scryptHashRate", "avgScryptShareTime"),
+		}
+	}
+	return out, nil
+}
+
+func (a *quaiAPI) peers(ctx context.Context) (float64, error) {
+	var p string
+	err := a.call(ctx, "net_peerCount", nil, &p)
+	return num(p), err
+}
+
+func (a *quaiAPI) pending(ctx context.Context) (float64, error) {
+	var st map[string]any
+	if err := a.call(ctx, "txpool_status", nil, &st); err != nil {
+		return 0, err
+	}
+	return num(st["pending"]) + num(st["queued"]) + num(st["qi"]), nil
+}
+
+func (a *quaiAPI) sync(ctx context.Context) (float64, float64, bool, error) {
+	h, _, err := a.tip(ctx)
+	return h, h, false, err
 }

@@ -29,7 +29,9 @@ func isEmojiish(r rune) bool {
 	return isRegional(r) || unicode.Is(unicode.So, r) || unicode.Is(unicode.Sk, r) && r > 0x2000
 }
 
-func isJoiner(r rune) bool { return r == 0x200D || r == 0xFE0F || r == 0xFE0E || (r >= 0x1F3FB && r <= 0x1F3FF) }
+func isJoiner(r rune) bool {
+	return r == 0x200D || r == 0xFE0F || r == 0xFE0E || (r >= 0x1F3FB && r <= 0x1F3FF)
+}
 
 // words splits like lodash's unicodeWords for the inputs that matter here:
 // letter runs split at lower→upper and ACRONYMWord boundaries, digit runs,
