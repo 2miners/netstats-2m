@@ -24,4 +24,5 @@ release:
 		cp README.md LICENSE example.env deploy/netstats-2m@.service $(RELEASE)/stage/$$name/ && \
 		tar -C $(RELEASE)/stage -czf $(RELEASE)/$$name.tar.gz $$name || exit 1; \
 	done
+	rm -rf $(RELEASE)/stage
 	cd $(RELEASE) && shasum -a 256 *.tar.gz > SHA256SUMS
