@@ -87,14 +87,6 @@ func nodeEnv(def string, keys ...string) string {
 	return def
 }
 
-func osRelease() string {
-	b, err := os.ReadFile("/proc/sys/kernel/osrelease")
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(b))
-}
-
 func main() {
 	envFile := flag.String("env", "", "file with KEY=VALUE settings (real env wins)")
 	showVersion := flag.Bool("version", false, "print version")
@@ -144,7 +136,7 @@ func main() {
 		"api":              nil,
 		"port":             port,
 		"os":               runtime.GOOS,
-		"os_v":             osRelease(),
+		"os_v":             "", // the page shows the OS name only, not the kernel
 		"client":           strings.TrimPrefix(version, "v"),
 		"canUpdateHistory": true,
 	}
