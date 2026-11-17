@@ -22,6 +22,7 @@ const (
 	maxHistoryUpdate   = 50
 	connectionRetry    = 5 * time.Second
 	serverRetry        = 5 * time.Second
+	infoInterval       = time.Minute
 	serverRefusedRetry = time.Minute
 )
 
@@ -178,6 +179,9 @@ func (r *Reporter) init(c Node) {
 	}
 }
 
+// getInfo reads the node version, network and coinbase. When they change
+// (the node was updated or restarted) while the server socket is open, it
+// sends "hello" again: the server keeps the info from the last hello only.
 func (r *Reporter) getInfo(c Node) {
 	node, net, coinbase, err := c.Info()
 	if err != nil {
@@ -185,11 +189,22 @@ func (r *Reporter) getInfo(c Node) {
 		return
 	}
 	r.mu.Lock()
+	before, _ := json.Marshal(r.cfg.Info)
 	r.cfg.Info["node"] = node
 	r.cfg.Info["net"] = net
 	r.cfg.Info["api"] = "1.0.0"
 	r.cfg.Info["coinbase"] = coinbase
+	after, _ := json.Marshal(r.cfg.Info)
+	srv := r.server
+	info := cloneMap(r.cfg.Info)
 	r.mu.Unlock()
+	if string(before) == string(after) || srv == nil {
+		return
+	}
+	r.log.Info("node info changed, sending hello again", "node", node)
+	if err := srv.Emit("hello", map[string]any{"id": r.cfg.ID, "info": info, "secret": r.cfg.Secret}); err != nil {
+		r.log.Debug("socket emit error", "err", err)
+	}
 }
 
 // chainDebounce is the chain-filter throttling of the JS client.
@@ -584,12 +599,20 @@ func (r *Reporter) onServerEvent(c *primus.Conn, event string, args []json.RawMe
 func (r *Reporter) timers(ctx context.Context) {
 	stats := time.NewTicker(updateInterval)
 	ping := time.NewTicker(pingInterval)
+	info := time.NewTicker(infoInterval)
 	defer stats.Stop()
 	defer ping.Stop()
+	defer info.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-info.C:
+			// a quick node restart can slip between polls without dropping
+			// the connection, so check the version now and then as well
+			if c := r.rpcClient(); c != nil {
+				go r.getInfo(c)
+			}
 		case <-stats.C:
 			go r.getStats(false)
 		case <-ping.C:
