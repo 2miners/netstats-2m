@@ -26,12 +26,13 @@ Node-side reporter for the 2Miners network stats pages. It runs next to a node, 
 | <img src="docs/logos/qtc.svg" width="24" height="24" alt="QTC"> | **Quantus** (QTC) | [2miners.com/qtc-stats](https://2miners.com/qtc-stats/) | `substrate` | [examples/qtc.env](examples/qtc.env) |
 | <img src="docs/logos/quai.svg" width="24" height="24" alt="QUAI"> | **Quai** (QUAI) | [2miners.com/quai-stats](https://2miners.com/quai-stats/) | `quai` | [examples/quai.env](examples/quai.env) |
 | <img src="docs/logos/kas.svg" width="24" height="24" alt="KAS"> | **Kaspa** (KAS) | [2miners.com/kas-stats](https://2miners.com/kas-stats/) | `kaspa` | [examples/kas.env](examples/kas.env) |
+| <img src="docs/logos/neb.svg" width="24" height="24" alt="NEB"> | **Neural Engine Byte** (NEB) | [2miners.com/neb-stats](https://2miners.com/neb-stats/) | `neb` | [examples/neb.env](examples/neb.env) |
 
 How the node is read:
 
 * **Ethereum family** (core-geth, geth): WebSocket JSON-RPC with `newHeads` / `newPendingTransactions` subscriptions.
 * **Bitcoin forks** (`CHAIN=btc`): bitcoind-style HTTP JSON-RPC, polled; fees from `getblockstats` or the coinbase minus the block reward.
-* **Others**: each node's own API, polled (monerod json_rpc, Ergo REST, CKB JSON-RPC, Beam explorer, Grin/MWC node API, Aeternity HTTP, Substrate, go-quai, rusty-kaspa gRPC).
+* **Others**: each node's own API, polled (monerod json_rpc, Ergo REST, CKB JSON-RPC, Beam explorer, Grin/MWC node API, Aeternity HTTP, Substrate, go-quai, rusty-kaspa gRPC, neb-node JSON-RPC).
 
 A single static Go binary: no Node.js, npm or PM2.
 
@@ -73,7 +74,7 @@ One env file per node; start from the network's file in [examples/](examples/):
 | `CHAIN` | `eth` (default) or `btc` for Bitcoin forks |
 | `RPC_HOST`, `RPC_PORT`, `RPC_USER`, `RPC_PASSWORD` | `CHAIN=btc`: node HTTP RPC (default `localhost:8766`, the ravend port) and its `rpcuser` / `rpcpassword` |
 | `SUBSIDY_START`, `SUBSIDY_HALVING` | `CHAIN=btc`: block reward at height 0 and the halving interval, so fees can be told from the reward in the coinbase (default Ravencoin: `5000`, `2100000`; Bitcoin: `50`, `210000`) |
-| `CHAIN=monero`, `ergo`, `ckb`, `beam`, `grin`, `ae`, `substrate`, `quai`, `kaspa` | other node APIs, polled every `POLL_INTERVAL` (default `1s`): Zephyr (monerod json_rpc, `RPC_USER`/`RPC_PASSWORD` = rpc-login, digest auth), Ergo REST, Nervos CKB JSON-RPC, Beam explorer-node API, Grin/MWC node API v2 (`RPC_USER` `grin`/`mwcmain`, `RPC_PASSWORD` foreign secret, `RPC_OWNER_PASSWORD` owner secret for peers and sync), Aeternity HTTP API, Substrate (Quantus: difficulty and time from storage), Quai zone chain with KawPoW, SHA256 and Scrypt difficulty, hashrate and share time from `quai_getMiningInfo`, Kaspa over its gRPC (own minimal client, no generated code; samples of the DAG sink numbered by DAA score, no history; block time averaged over 30 s, hashrate estimate refreshed every 10 s). `NODE_NAME` names the node on the page |
+| `CHAIN=monero`, `ergo`, `ckb`, `beam`, `grin`, `ae`, `substrate`, `quai`, `kaspa`, `neb` | other node APIs, polled every `POLL_INTERVAL` (default `1s`): Zephyr (monerod json_rpc, `RPC_USER`/`RPC_PASSWORD` = rpc-login, digest auth), Ergo REST, Nervos CKB JSON-RPC, Beam explorer-node API, Grin/MWC node API v2 (`RPC_USER` `grin`/`mwcmain`, `RPC_PASSWORD` foreign secret, `RPC_OWNER_PASSWORD` owner secret for peers and sync), Aeternity HTTP API, Substrate (Quantus: difficulty and time from storage), Quai zone chain with KawPoW, SHA256 and Scrypt difficulty, hashrate and share time from `quai_getMiningInfo`, Kaspa over its gRPC (own minimal client, no generated code; samples of the DAG sink numbered by DAA score, no history; block time averaged over 30 s, hashrate estimate refreshed every 10 s), Neural Engine Byte (neb-node JSON-RPC, no auth; difficulty (2^256-1)/target from `bits`, fees = coinbase minus the 20 NEB reward). `NODE_NAME` names the node on the page |
 | `WS_SERVER` | netstats server: `wss://<network>-stats.2miners.com` (see the table above) |
 | `WS_SECRET` | server secret: the value in the examples (public on purpose, any pool may report its node) |
 | `INSTANCE_NAME` | name shown on the page; required with `NODE_ENV=production`. The node id on the server is its camelCase form |

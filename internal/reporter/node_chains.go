@@ -16,7 +16,7 @@ import (
 
 // ChainConfig selects and configures a polled node type (CHAIN=...).
 type ChainConfig struct {
-	Kind       string // monero, ergo, ckb, beam, grin, ae, substrate
+	Kind       string // monero, ergo, ckb, beam, grin, ae, substrate, quai, kaspa, neb
 	URL        string // http://host:port
 	User, Pass string
 	OwnerPass  string // grin: owner API secret (peers, sync status)
@@ -50,6 +50,8 @@ func ChainDialer(c ChainConfig) (Dialer, error) {
 		mk = func() chainAPI { return &kaspaAPI{addr: addr} }
 	case "quai":
 		mk = func() chainAPI { return &quaiAPI{c: rpc.NewJSON(c.URL, c.User, c.Pass)} }
+	case "neb":
+		mk = func() chainAPI { return &nebAPI{c: rpc.NewJSON(c.URL, "", "")} }
 	case "substrate":
 		mk = func() chainAPI { return &substrateAPI{c: rpc.NewJSON(c.URL, c.User, c.Pass), name: c.Name} }
 	default:
